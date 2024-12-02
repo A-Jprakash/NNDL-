@@ -1,0 +1,98 @@
+!pip install tensorflow
+!pip install keras
+
+# Importing Libraries
+import numpy as np
+from tensorflow import keras
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.preprocessing import sequence # Added tensorflow.keras for compatibility
+from tensorflow.keras.layers import Dropout, Dense, Embedding, LSTM # Added tensorflow.keras for compatibility
+from tensorflow.keras.datasets import imdb # Added tensorflow.keras for compatibility
+from tensorflow.keras.callbacks import EarlyStopping # Added tensorflow.keras for compatibility
+# from keras.preprocessing.text import Tokenizer # This import is no longer needed
+from tensorflow.keras.preprocessing.text import Tokenizer # Imported Tokenizer from tensorflow.keras
+from tensorflow.keras.preprocessing.sequence import pad_sequences # Added tensorflow.keras for compatibility
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+import re
+import nltk
+
+# ... (rest of your code remains the same) ...
+
+nltk.download('stopwords')
+nltk.download('wordnet')
+
+# Loading Datasets
+(x_train, y_train), (x_test, y_test) = imdb.load_data(num_words=10000)
+word_index = imdb.get_word_index()
+reverse_word_index = {value: key for (key, value) in word_index.items()}
+
+# Preprocessing Function
+def preprocess_text(text):
+    text = re.sub(r'<[^>]+>', '', text)
+    text = re.sub(r'\d+', '', text)
+    text = re.sub(r'[^\w\s]', '', text)
+    text = text.lower()
+    stop_words = set(stopwords.words('english'))
+    words = text.split()
+    words = [word for word in words if word not in stop_words]
+    lemmatizer = WordNetLemmatizer()
+    words = [lemmatizer.lemmatize(word) for word in words]
+    return ' '.join(words)
+
+# Preprocessing Data
+x_train_text = [' '.join([reverse_word_index.get(i - 3, '?') for i in sequence]) for sequence in x_train]
+x_test_text = [' '.join([reverse_word_index.get(i - 3, '?') for i in sequence]) for sequence in x_test]
+x_train_text = [preprocess_text(text) for text in x_train_text]
+x_test_text = [preprocess_text(text) for text in x_test_text]
+
+maxlen = 200
+tokenizer = Tokenizer(num_words=10000)
+tokenizer.fit_on_texts(x_train_text)
+
+x_train_seq = tokenizer.texts_to_sequences(x_train_text)
+x_test_seq = tokenizer.texts_to_sequences(x_test_text)
+
+x_train = pad_sequences(x_train_seq, maxlen=maxlen)
+x_test = pad_sequences(x_test_seq, maxlen=maxlen)
+
+y_train = np.array(y_train)
+y_test = np.array(y_test)
+
+# Building and Compiling Model
+model = Sequential([
+    Embedding(10000, 64, input_length=maxlen),
+    LSTM(32),
+    Dropout(0.5),
+    Dense(1, activation='sigmoid')
+])
+
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+# Training Model
+history = model.fit(x_train, y_train, batch_size=128, epochs=10, validation_data=(x_test, y_test))
+
+# Visualizing Results
+from matplotlib import pyplot as plt
+
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.plot(history.history['accuracy'])
+plt.plot(history.history['val_accuracy'])
+plt.title('Model Loss vs Accuracy')
+plt.xlabel('Epoch')
+plt.legend(['Loss', 'Accuracy', 'Val_Loss', 'Val_Accuracy'], loc='upper right')
+plt.show()
+
+# Making Predictions
+sample_text = "This is a great movie with fantastic performances!"
+sample_text = preprocess_text(sample_text)
+tokenized_sample = tokenizer.texts_to_sequences([sample_text])
+padded_sample = pad_sequences(tokenized_sample, maxlen=maxlen)
+prediction = model.predict(padded_sample)
+
+threshold = 0.5
+if prediction[0][0] > threshold:
+    print(f"The sample text is predicted as positive with confidence: {prediction[0][0]:.2f}")
+else:
+    print(f"The sample text is predicted as negative with confidence: {1 - prediction[0][0]:.2f}")
